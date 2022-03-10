@@ -434,6 +434,22 @@ class BartDecoderLayer(nn.Module):
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+            event_cross_attn_past_key_value = past_key_value[4:] if past_key_value is not None else None
+            hidden_states, event_cross_attn_weights, cross_attn_present_key_value = self.event_attention(
+                hidden_states=hidden_states,
+                key_value_states=event_hidden_states,
+                attention_mask=encoder_event_attention_mask,
+                layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=event_cross_attn_past_key_value,
+                output_attentions=output_attentions,
+            )
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = residual + hidden_states
+            hidden_states = self.event_attn_layer_norm(hidden_states)
+
+            present_key_value = present_key_value + cross_attn_present_key_value
+
+            residual = hidden_states
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[2:4] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
@@ -451,21 +467,6 @@ class BartDecoderLayer(nn.Module):
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
-            residual = hidden_states
-            event_cross_attn_past_key_value = past_key_value[4:] if past_key_value is not None else None
-            hidden_states, event_cross_attn_weights, cross_attn_present_key_value = self.event_attention(
-                hidden_states=hidden_states,
-                key_value_states=event_hidden_states,
-                attention_mask=encoder_event_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=event_cross_attn_past_key_value,
-                output_attentions=output_attentions,
-            )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-            hidden_states = residual + hidden_states
-            hidden_states = self.event_attn_layer_norm(hidden_states)
-
-            present_key_value = present_key_value + cross_attn_present_key_value
         # if event_embeddings is not None:
         #     residual = hidden_states
 
